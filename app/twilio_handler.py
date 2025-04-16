@@ -40,8 +40,9 @@ class TwilioHandler:
             logger.info("Processing voice call")
             response = VoiceResponse()
             
-            # Add a greeting
-            response.say("Hello! I'm your AI assistant. How can I help you today?")
+            # Add a natural greeting with slight pause
+            response.pause(length=1)
+            response.say("Hello! I'm your AI assistant. How can I help you today?", voice="Polly.Amy")
             
             # Add a gather element to collect speech
             gather = Gather(
@@ -49,13 +50,16 @@ class TwilioHandler:
                 action='/speech',
                 method='POST',
                 language='en-US',
-                speechTimeout='auto'
+                speechTimeout='auto',
+                enhanced='true',
+                speechModel='phone_call'
             )
-            gather.say("Please speak your question or request.")
+            gather.say("Please go ahead and speak your question.", voice="Polly.Amy")
             response.append(gather)
             
-            # If no speech is detected, say goodbye
-            response.say("I didn't catch that. Goodbye!")
+            # If no speech is detected, add a natural follow-up
+            response.pause(length=20)
+            response.say("I didn't quite catch that. Could you please try again?", voice="Polly.Amy")
             
             return str(response)
         except Exception as e:
@@ -70,11 +74,12 @@ class TwilioHandler:
             
             # Get the speech result
             speech_result = form_data.get('SpeechResult', '')
-            logger.info(f"Received speech: {speech_result}")
+            confidence = float(form_data.get('Confidence', 0))
+            logger.info(f"Received speech: {speech_result} (confidence: {confidence})")
             
-            if not speech_result:
-                logger.warning("No speech result received")
-                response.say("I didn't catch that. Please try again.")
+            if not speech_result or confidence < 0.5:
+                response.pause(length=1)
+                response.say("I'm having trouble understanding. Could you please repeat that?", voice="Polly.Amy")
                 return str(response)
             
             # Get response from OpenAI
@@ -84,27 +89,35 @@ class TwilioHandler:
                 logger.info(f"OpenAI response: {ai_response}")
                 
                 if not ai_response:
-                    logger.error("Empty response received from OpenAI")
-                    response.say("I'm sorry, I didn't get a response. Please try again.")
+                    response.pause(length=1)
+                    response.say("I'm sorry, I didn't get a response. Could you please try again?", voice="Polly.Amy")
                 else:
-                    response.say(ai_response)
+                    # Add natural pauses and voice modulation
+                    response.pause(length=1)
+                    response.say(ai_response, voice="Polly.Amy")
+                    
+                    # Add a single follow-up gather
+                    response.pause(length=1)
+                    gather = Gather(
+                        input='speech',
+                        action='/speech',
+                        method='POST',
+                        language='en-US',
+                        speechTimeout='auto',
+                        enhanced='true',
+                        speechModel='phone_call'
+                    )
+                    gather.say("What else would you like to know?", voice="Polly.Amy")
+                    response.append(gather)
+                    
+                    # If no response after the gather, end the call naturally
+                    response.pause(length=2)
+                    response.say("Thank you for calling. Have a great day!", voice="Polly.Amy")
+                    
             except Exception as e:
                 logger.error(f"Error getting OpenAI response: {str(e)}", exc_info=True)
-                response.say("I'm sorry, I encountered an error processing your request. Please try again.")
-            
-            # Add another gather for follow-up
-            gather = Gather(
-                input='speech',
-                action='/speech',
-                method='POST',
-                language='en-US',
-                speechTimeout='auto'
-            )
-            gather.say("Is there anything else I can help you with?")
-            response.append(gather)
-            
-            # If no speech is detected, say goodbye
-            response.say("I didn't catch that. Goodbye!")
+                response.pause(length=1)
+                response.say("I'm having some trouble processing your request. Let's try that again.", voice="Polly.Amy")
             
             return str(response)
         except Exception as e:
