@@ -2,7 +2,7 @@ import openai
 import os
 
 # Set API key and project configuration
-openai.api_key = "Your_API_KEY"
+openai.api_key = "YOUR_API_KEY"
 openai.api_base = "https://api.openai.com/v1"
 
 try:
