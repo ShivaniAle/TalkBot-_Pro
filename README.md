@@ -92,9 +92,9 @@ gcloud run deploy voiceflow-ai --image gcr.io/your-project/voiceflow-ai
 ```bash
 Python run.py
 ```
-###2. Configure your Twilio Webhook:
+### 2. Configure your Twilio Webhook:
    
-##API Endpoints
+## API Endpoints
  - GET /: Root endpoint
  - GET /health: Health check endpoint
  - POST /voice: Handle incoming voice calls
@@ -110,21 +110,21 @@ choco install ngrok
 brew install ngrok
 
 ```
-###2.Start ngrok to create a tunnel to your local server:
+### 2.Start ngrok to create a tunnel to your local server:
 ```bash
 ngrok http 8000
 ```
-###3.Note the HTTPS URL provided by ngrok (e.g., https://abc123.ngrok.io)
+### 3.Note the HTTPS URL provided by ngrok (e.g., https://abc123.ngrok.io)
 
 ## Configuring Twilio
-###1.Sign up for a Twilio account at twilio.com
+### 1.Sign up for a Twilio account at twilio.com
 
-###2.Get your Twilio credentials:
+### 2.Get your Twilio credentials:
 
  - Account SID
  - Auth Token
  - Phone Number
-###3.Configure your Twilio phone number:
+### 3.Configure your Twilio phone number:
 
 - Go to the Twilio Console
 - Navigate to Phone Numbers > Manage > Active Numbers
@@ -135,7 +135,7 @@ ngrok http 8000
 - Under "Voice & Fax" > "Speech Recognition":
 - Set the webhook URL to: https://your-ngrok-url/speech
 - Set the HTTP method to: POST
-###4.Update your .env file with Twilio credentials:
+### 4.Update your .env file with Twilio credentials:
 ```bash
 TWILIO_ACCOUNT_SID=your_account_sid
 TWILIO_AUTH_TOKEN=your_auth_token
@@ -143,15 +143,15 @@ TWILIO_PHONE_NUMBER=your_twilio_phone_number
 ```
 
 ##Testing the Setup
-###1.Start your application:
+### 1.Start your application:
 ```bash
 python run.py
 ```
-###2.Start ngrok in a separate terminal:
+### 2.Start ngrok in a separate terminal:
 ```bash
 ngrok http 8000
 ```
-###3.Make a test call:
+### 3.Make a test call:
 
  - Call your Twilio phone number
  - You should hear the AI assistant's greeting
