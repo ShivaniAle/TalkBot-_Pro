@@ -28,6 +28,7 @@ class OpenAIClient:
             })
             
             self.assistant_id = settings.openai_assistant_id
+            self.conversation_history = []
             logger.info("OpenAI client initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing OpenAI client: {str(e)}", exc_info=True)
@@ -38,22 +39,32 @@ class OpenAIClient:
         try:
             logger.info(f"Sending request to OpenAI: {user_input}")
             
+            # Add user input to conversation history
+            self.conversation_history.append({"role": "user", "content": user_input})
+            
             # Create a thread
             thread = self.client.beta.threads.create()
             logger.info(f"Created thread: {thread.id}")
             
-            # Add message to thread
-            message = self.client.beta.threads.messages.create(
-                thread_id=thread.id,
-                role="user",
-                content=user_input
-            )
-            logger.info(f"Added message to thread: {message.id}")
+            # Add conversation history to thread
+            for message in self.conversation_history:
+                self.client.beta.threads.messages.create(
+                    thread_id=thread.id,
+                    role=message["role"],
+                    content=message["content"]
+                )
             
-            # Run the assistant
+            # Run the assistant with specific instructions
             run = self.client.beta.threads.runs.create(
                 thread_id=thread.id,
-                assistant_id=self.assistant_id
+                assistant_id=self.assistant_id,
+                instructions="""You are a friendly and conversational AI assistant. 
+                Keep your responses natural and engaging. 
+                Use a warm, helpful tone and maintain context from previous messages.
+                Keep responses concise but informative.
+                If you're unsure about something, be honest about it.
+                Use natural language patterns and occasional conversational fillers.
+                Remember that you're speaking to someone, so be personable."""
             )
             logger.info(f"Created run: {run.id}")
             
@@ -86,6 +97,13 @@ class OpenAIClient:
                 
             response = assistant_messages[0].content[0].text.value
             logger.info(f"Received response from OpenAI: {response}")
+            
+            # Add assistant response to conversation history
+            self.conversation_history.append({"role": "assistant", "content": response})
+            
+            # Keep conversation history manageable
+            if len(self.conversation_history) > 10:
+                self.conversation_history = self.conversation_history[-10:]
             
             return response
             
