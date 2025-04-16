@@ -1,14 +1,15 @@
-# Voice AI Agent
+# VoiceFlow AI
 
-A conversational AI voice agent built with OpenAI Assistants SDK, Twilio, and Google Cloud Platform.
+A sophisticated voice AI agent that handles phone calls and provides intelligent responses using OpenAI's Assistants API.
 
 ## Features
 
-- Voice input handling via Twilio
-- Real-time transcription using Google Cloud Speech-to-Text
-- Conversational responses using OpenAI Assistants
-- Audio file storage in Google Cloud Storage
-- Extensible architecture for adding new tools and agents
+- **Voice Call Handling**: Seamless integration with Twilio for handling incoming calls
+- **Real-time Speech Processing**: Advanced speech recognition and processing
+- **AI-Powered Responses**: Intelligent conversation handling using OpenAI's Assistants API
+- **Cloud Storage**: Secure storage of audio files in Google Cloud Storage
+- **Text-to-Speech**: High-quality voice responses using Google Cloud Text-to-Speech
+- **Extensible Architecture**: Modular design for easy extension and maintenance
 
 ## Project Structure
 
@@ -16,66 +17,122 @@ A conversational AI voice agent built with OpenAI Assistants SDK, Twilio, and Go
 voice_agent/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py              # FastAPI application
-│   ├── config.py            # Configuration management
-│   ├── twilio_handler.py    # Twilio webhook handling
-│   ├── openai_handler.py    # OpenAI integration
+│   ├── main.py              # FastAPI application entry point
+│   ├── config.py            # Configuration settings
+│   ├── twilio_handler.py    # Twilio call handling
+│   ├── openai_handler.py    # OpenAI API integration
 │   ├── gcp_handler.py       # Google Cloud Platform services
-│   ├── models/              # Data models
+│   ├── models/
 │   │   ├── __init__.py
-│   │   ├── conversation.py
-│   │   └── audio.py
-│   └── utils/               # Utility functions
+│   │   ├── audio.py         # Audio file models
+│   │   └── conversation.py  # Conversation models
+│   └── utils/
 │       ├── __init__.py
-│       ├── audio_utils.py
-│       └── storage_utils.py
-├── tests/                   # Test files
-├── .env                     # Environment variables
-├── requirements.txt         # Python dependencies
-└── README.md               # Project documentation
+│       ├── audio_utils.py   # Audio processing utilities
+│       └── storage_utils.py # Cloud storage utilities
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py
+│   ├── test_main.py
+│   ├── test_twilio_handler.py
+│   ├── test_openai_handler.py
+│   ├── test_gcp_handler.py
+│   ├── test_models.py
+│   └── test_utils.py
+├── requirements.txt
+├── .env.example
+└── run.py                   # Application runner
 ```
 
 ## Setup
 
-1. Clone the repository
-2. Install dependencies:
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/voiceflow-ai.git
+   cd voiceflow-ai
+   ```
+
+2. Create and activate a virtual environment:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-3. Set up environment variables in `.env`:
-   ```
+
+4. Create a `.env` file with your API keys:
+   ```env
+   # OpenAI
    OPENAI_API_KEY=your_openai_api_key
+   OPENAI_ASSISTANT_ID=your_assistant_id
+
+   # Twilio
    TWILIO_ACCOUNT_SID=your_twilio_account_sid
    TWILIO_AUTH_TOKEN=your_twilio_auth_token
+   TWILIO_PHONE_NUMBER=your_twilio_phone_number
+
+   # Google Cloud
    GCP_PROJECT_ID=your_gcp_project_id
-   GCP_BUCKET_NAME=your_gcs_bucket_name
+   GCP_BUCKET_NAME=your_bucket_name
+   GOOGLE_APPLICATION_CREDENTIALS=path_to_your_credentials.json
+
+   # Application
+   DEBUG=true
+   HOST=0.0.0.0
+   PORT=8000
    ```
-4. Set up Google Cloud credentials:
-   - Download service account key file
-   - Set GOOGLE_APPLICATION_CREDENTIALS environment variable
+
+5. Configure Google Cloud credentials:
+   - Download your service account key file
+   - Set the path in `GOOGLE_APPLICATION_CREDENTIALS`
 
 ## Running the Application
 
-1. Start the FastAPI server:
+1. Start the server:
    ```bash
-   uvicorn app.main:app --reload
+   python run.py
    ```
-2. Configure Twilio webhook URL to point to your server's `/twilio/voice` endpoint
+
+2. Configure your Twilio webhook:
+   - Set the voice webhook URL to: `https://your-domain.com/voice`
+   - Set the speech webhook URL to: `https://your-domain.com/speech`
 
 ## Development
 
-- Use `black` for code formatting
-- Use `isort` for import sorting
-- Use `mypy` for type checking
-- Run tests with `pytest`
+### Code Style
 
-app/main.py: The main FastAPI application with routes and middleware setup
-app/config.py: Configuration management using Pydantic settings
-app/twilio_handler.py: Handles Twilio voice interactions and webhooks
-app/openai_handler.py: Manages interactions with OpenAI's API
-app/gcp_handler.py: Handles Google Cloud Platform services
-app/models/audio.py: Data model for audio files
-app/models/conversation.py: Data model for conversation management
-app/utils/audio_utils.py: Utility functions for audio processing
-app/utils/storage_utils.py: Utility functions for storage operations
-requirements.txt: Project dependencies with specific versions
+- Format code with black:
+  ```bash
+  black .
+  ```
+
+- Sort imports with isort:
+  ```bash
+  isort .
+  ```
+
+- Type checking with mypy:
+  ```bash
+  mypy .
+  ```
+
+### Testing
+
+Run tests with pytest:
+```bash
+pytest
+```
+
+## API Endpoints
+
+- `GET /`: Root endpoint
+- `GET /health`: Health check endpoint
+- `POST /voice`: Handle incoming voice calls
+- `POST /speech`: Handle speech results from Twilio
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
