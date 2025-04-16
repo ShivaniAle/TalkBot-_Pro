@@ -118,3 +118,90 @@ pytest
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Development Setup with ngrok and Twilio
+
+### Setting up ngrok
+
+1. Download and install ngrok:
+   ```bash
+   # For Windows (using Chocolatey)
+   choco install ngrok
+
+   # For macOS (using Homebrew)
+   brew install ngrok
+
+   # For Linux
+   sudo snap install ngrok
+   ```
+
+2. Start ngrok to create a tunnel to your local server:
+   ```bash
+   ngrok http 8000
+   ```
+
+3. Note the HTTPS URL provided by ngrok (e.g., `https://abc123.ngrok.io`)
+
+### Configuring Twilio
+
+1. Sign up for a Twilio account at [twilio.com](https://www.twilio.com)
+
+2. Get your Twilio credentials:
+   - Account SID
+   - Auth Token
+   - Phone Number
+
+3. Configure your Twilio phone number:
+   - Go to the [Twilio Console](https://console.twilio.com)
+   - Navigate to Phone Numbers > Manage > Active Numbers
+   - Click on your phone number
+   - Under "Voice & Fax" > "A Call Comes In":
+     - Set the webhook URL to: `https://your-ngrok-url/voice`
+     - Set the HTTP method to: `POST`
+   - Under "Voice & Fax" > "Speech Recognition":
+     - Set the webhook URL to: `https://your-ngrok-url/speech`
+     - Set the HTTP method to: `POST`
+
+4. Update your `.env` file with Twilio credentials:
+   ```env
+   TWILIO_ACCOUNT_SID=your_account_sid
+   TWILIO_AUTH_TOKEN=your_auth_token
+   TWILIO_PHONE_NUMBER=your_twilio_phone_number
+   ```
+
+### Testing the Setup
+
+1. Start your application:
+   ```bash
+   python run.py
+   ```
+
+2. Start ngrok in a separate terminal:
+   ```bash
+   ngrok http 8000
+   ```
+
+3. Make a test call:
+   - Call your Twilio phone number
+   - You should hear the AI assistant's greeting
+   - Speak your question
+   - The AI should respond through the call
+
+### Troubleshooting
+
+If you encounter issues:
+
+1. **ngrok Connection Issues**:
+   - Ensure your local server is running on port 8000
+   - Check that ngrok is properly installed and running
+   - Verify the ngrok URL is accessible
+
+2. **Twilio Webhook Issues**:
+   - Verify the webhook URLs in Twilio console match your ngrok URL
+   - Check that both `/voice` and `/speech` endpoints are properly configured
+   - Ensure your Twilio credentials are correct in the `.env` file
+
+3. **Call Handling Issues**:
+   - Check the application logs for errors
+   - Verify that your OpenAI API key and assistant ID are correctly set
+   - Ensure your Google Cloud credentials are properly configured
