@@ -100,24 +100,6 @@ voice_agent/
    - Set the voice webhook URL to: `https://your-domain.com/voice`
    - Set the speech webhook URL to: `https://your-domain.com/speech`
 
-## Development
-
-### Code Style
-
-- Format code with black:
-  ```bash
-  black .
-  ```
-
-- Sort imports with isort:
-  ```bash
-  isort .
-  ```
-
-- Type checking with mypy:
-  ```bash
-  mypy .
-  ```
 
 ### Testing
 
