@@ -88,11 +88,11 @@ gcloud run deploy voiceflow-ai --image gcr.io/your-project/voiceflow-ai
 
 ## Running the Application
 
-### 1. Start the server
+- 1. Start the server
 ```bash
 Python run.py
 ```
-### 2. Configure your Twilio Webhook:
+- 2. Configure your Twilio Webhook:
    
 ## API Endpoints
  - GET /: Root endpoint
@@ -101,7 +101,7 @@ Python run.py
  - POST /speech: Handle speech results from Twilio
 
 ## Setting up ngrok
-### 1.Download and install ngrok:
+- 1.Download and install ngrok:
 ```bash
 # For Windows (using Chocolatey)
 choco install ngrok
@@ -110,11 +110,11 @@ choco install ngrok
 brew install ngrok
 
 ```
-### 2.Start ngrok to create a tunnel to your local server:
+- 2.Start ngrok to create a tunnel to your local server:
 ```bash
 ngrok http 8000
 ```
-### 3.Note the HTTPS URL provided by ngrok (e.g., https://abc123.ngrok.io)
+- 3.Note the HTTPS URL provided by ngrok (e.g., https://abc123.ngrok.io)
 
 ## Configuring Twilio
 ### 1.Sign up for a Twilio account at twilio.com
@@ -142,7 +142,7 @@ TWILIO_AUTH_TOKEN=your_auth_token
 TWILIO_PHONE_NUMBER=your_twilio_phone_number
 ```
 
-##Testing the Setup
+## Testing the Setup
 ### 1.Start your application:
 ```bash
 python run.py
