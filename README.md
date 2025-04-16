@@ -115,11 +115,6 @@ pytest
 - `POST /voice`: Handle incoming voice calls
 - `POST /speech`: Handle speech results from Twilio
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Development Setup with ngrok and Twilio
 
 ### Setting up ngrok
 
