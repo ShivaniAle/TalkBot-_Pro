@@ -3,6 +3,7 @@ import os
 import logging
 from dotenv import load_dotenv
 from app.config import settings
+from typing import Optional
 
 # Set up logging
 logging.basicConfig(
@@ -34,8 +35,92 @@ class OpenAIClient:
             logger.error(f"Error initializing OpenAI client: {str(e)}", exc_info=True)
             raise
 
-    async def get_response(self, user_input: str) -> str:
+    async def get_response(self, user_input: str, conversation_history: Optional[str] = None) -> str:
         """Get response from OpenAI assistant"""
+        try:
+            logger.info("Getting response from OpenAI")
+            
+            # Prepare the conversation context
+            messages = []
+            
+            # Add system message to set the tone
+            messages.append({
+                "role": "system",
+                "content": """You are a friendly and helpful AI assistant having a natural conversation over the phone. 
+                Keep your responses conversational, warm, and engaging.
+                Use natural language patterns and occasional conversational fillers.
+                Keep responses concise but informative.
+                If you're not sure about something, say so honestly.
+                Remember that you're speaking to someone, so be personable.
+                Use simple, clear language that's easy to understand when spoken.
+                Avoid complex sentences or technical jargon.
+                Be enthusiastic and show interest in the conversation."""
+            })
+            
+            # Add conversation history if available
+            if conversation_history:
+                # Parse the conversation history string
+                for line in conversation_history.split('\n'):
+                    if line.strip():
+                        role, content = line.split(':', 1)
+                        messages.append({
+                            "role": role.strip(),
+                            "content": content.strip()
+                        })
+            
+            # Add the current user input
+            messages.append({
+                "role": "user",
+                "content": user_input
+            })
+            
+            # Get response from OpenAI
+            response = self.client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages,
+                temperature=0.8,  # Slightly increased for more natural responses
+                max_tokens=200,   # Increased for more detailed responses
+                presence_penalty=0.6,  # Encourage more diverse responses
+                frequency_penalty=0.6  # Reduce repetition
+            )
+            
+            # Extract and clean the response
+            ai_response = response.choices[0].message.content.strip()
+            
+            # Ensure the response is appropriate for voice
+            ai_response = self._format_for_voice(ai_response)
+            
+            logger.info(f"Generated response: {ai_response}")
+            return ai_response
+            
+        except Exception as e:
+            logger.error(f"Error getting OpenAI response: {str(e)}")
+            raise
+
+    def _format_for_voice(self, text: str) -> str:
+        """Format text to be more suitable for voice output"""
+        # Remove markdown formatting
+        text = text.replace('**', '').replace('*', '')
+        
+        # Replace common text patterns with more natural speech
+        replacements = {
+            '...': '.',
+            'etc.': 'and so on',
+            'e.g.': 'for example',
+            'i.e.': 'that is',
+            '&': 'and',
+            '%': 'percent',
+            '#': 'number',
+            '@': 'at'
+        }
+        
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        
+        return text
+
+    async def get_response_from_thread(self, user_input: str) -> str:
+        """Get response from OpenAI assistant using a thread"""
         try:
             logger.info(f"Sending request to OpenAI: {user_input}")
             
