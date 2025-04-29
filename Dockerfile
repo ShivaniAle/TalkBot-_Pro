@@ -7,7 +7,8 @@ WORKDIR /app
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=8080
+    PORT=9000 \
+    BASE_URL=http://localhost:9000
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -27,7 +28,7 @@ RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
 # Expose the port
-EXPOSE 8080
+EXPOSE 9000
 
-# Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"] 
+# Run the application with environment variables
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 9000"] 
