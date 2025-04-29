@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Request, Response
 from twilio.twiml.voice_response import VoiceResponse, Gather
 from twilio.rest import Client
+from twilio.base.exceptions import TwilioRestException
 import requests
 import os
 import logging
@@ -10,9 +11,9 @@ import time
 from dotenv import load_dotenv
 import base64
 from app.config import settings
+from typing import Dict, Any, Optional, Callable, Awaitable
+from app.utils import mask_sensitive_data
 from app.openai_handler import OpenAIClient
-from app.gcp_handler import GCPClient
-from typing import Dict, Any
 
 # Set up logging
 logging.basicConfig(
@@ -21,215 +22,373 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize Twilio client
-twilio_client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
+# Initialize Twilio client with uppercase settings
+client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
 
 router = APIRouter()
 
 class TwilioHandler:
     def __init__(self):
-        """Initialize the Twilio handler"""
-        self.account_sid = settings.TWILIO_ACCOUNT_SID
-        self.auth_token = settings.TWILIO_AUTH_TOKEN
-        self.phone_number = settings.TWILIO_PHONE_NUMBER
-        logger.info("Twilio handler initialized")
-
-    async def handle_voice(self, form_data: Dict[str, Any]) -> str:
-        """Handle incoming voice calls"""
+        """Initialize Twilio handler"""
         try:
-            logger.info("Processing voice call")
-            response = VoiceResponse()
+            if not settings.TWILIO_ACCOUNT_SID or not settings.TWILIO_AUTH_TOKEN:
+                raise ValueError("Twilio credentials not set in environment variables")
             
-            # Add a natural greeting with slight pause
-            response.pause(length=1)
-            response.say("Hello! I'm your AI assistant. How can I help you today?", voice="Polly.Amy")
-            
-            # Add a gather element to collect speech
-            gather = Gather(
-                input='speech',
-                action='/speech',
-                method='POST',
-                language='en-US',
-                speechTimeout='auto',
-                enhanced='true',
-                speechModel='phone_call'
-            )
-            gather.say("Please go ahead and speak your question.", voice="Polly.Amy")
-            response.append(gather)
-            
-            # If no speech is detected, add a natural follow-up
-            response.pause(length=20)
-            response.say("I didn't quite catch that. Could you please try again?", voice="Polly.Amy")
-            
-            return str(response)
+            self.openai_client = OpenAIClient()
+            logger.info("Twilio handler initialized successfully")
         except Exception as e:
-            logger.error(f"Error handling voice call: {str(e)}", exc_info=True)
+            logger.error(f"Error initializing Twilio handler: {str(e)}")
             raise
 
-    async def handle_speech(self, form_data: Dict[str, Any], openai_client: Any) -> str:
-        """Handle speech results from Twilio"""
+    async def handle_voice(self, request: Request) -> Response:
+        """Handle incoming voice call with natural conversation settings"""
         try:
-            logger.info("Processing speech result")
             response = VoiceResponse()
             
-            # Get the speech result
-            speech_result = form_data.get('SpeechResult', '')
-            confidence = float(form_data.get('Confidence', 0))
-            logger.info(f"Received speech: {speech_result} (confidence: {confidence})")
+            # Set up natural conversation settings
+            gather = Gather(
+                input="speech dtmf",
+                action="/twilio/speech",
+                method="POST",
+                timeout=2,  # Shorter timeout for more natural flow
+                speechTimeout="auto",
+                language="en-US",
+                speechModel="phone_call",
+                enhanced="true",
+                bargeIn="true",
+                actionOnEmptyResult="true",
+                finishOnKey="*",
+                partialResultCallback="/twilio/speech",
+                partialResultCallbackMethod="POST",
+                hints="interrupt,stop,wait",
+                speechRecognitionSensitivity="high",
+                speechRecognitionConfidence="high",
+                speechRecognitionTimeout="auto",
+                speechRecognitionLanguage="en-US",
+                speechRecognitionModel="phone_call",
+                speechRecognitionProfanityFilter="false",
+                speechRecognitionPartialResults="true",
+                speechRecognitionHints="interrupt,stop,wait"
+            )
             
-            if not speech_result or confidence < 0.5:
-                response.pause(length=1)
-                response.say("I'm having trouble understanding. Could you please repeat that?", voice="Polly.Amy")
-                return str(response)
+            # Add natural greeting with pauses
+            gather.say(
+                "Hey there! <break time='0.5s'/> It's great to hear from you. <break time='0.3s'/> What's on your mind?",
+                voice="Polly.Amy",
+                language="en-GB"
+            )
             
-            # Get response from OpenAI
-            try:
-                logger.info("Sending request to OpenAI")
-                ai_response = await openai_client.get_response(speech_result)
-                logger.info(f"OpenAI response: {ai_response}")
+            response.append(gather)
+            return Response(str(response), mimetype="application/xml")
+            
+        except Exception as e:
+            logger.error(f"Error in handle_voice: {str(e)}")
+            response = VoiceResponse()
+            response.say("I'm having some trouble. Could you please try again?")
+            return Response(str(response), mimetype="application/xml")
+
+    async def handle_speech(self, request: Request) -> Response:
+        """Handle speech recognition results with natural conversation flow"""
+        try:
+            form_data = await request.form()
+            speech_result = form_data.get("SpeechResult", "").strip()
+            confidence = float(form_data.get("Confidence", 0))
+            interrupted = form_data.get("Interrupted", "false").lower() == "true"
+            
+            logger.info(f"Speech result: {speech_result}, Confidence: {confidence}, Interrupted: {interrupted}")
+            
+            # Create response object
+            response = VoiceResponse()
+            
+            # If speech was interrupted, handle it naturally
+            if interrupted:
+                logger.info("Handling interrupted speech")
+                # Create a stop response to immediately halt current speech
+                stop_response = VoiceResponse()
+                stop_response.say("", voice="Polly.Amy", language="en-GB")  # Empty say command to stop current speech
                 
-                if not ai_response:
-                    response.pause(length=1)
-                    response.say("I'm sorry, I didn't get a response. Could you please try again?", voice="Polly.Amy")
-                else:
-                    # Add natural pauses and voice modulation
-                    response.pause(length=1)
-                    response.say(ai_response, voice="Polly.Amy")
+                # Process the interruption immediately
+                try:
+                    # Get AI response for the interruption
+                    ai_response = await self.openai_client.get_response(speech_result)
                     
-                    # Add a single follow-up gather
-                    response.pause(length=1)
+                    if not ai_response:
+                        raise Exception("Empty response from AI")
+                    
+                    # Configure voice response for natural conversation
                     gather = Gather(
-                        input='speech',
-                        action='/speech',
-                        method='POST',
-                        language='en-US',
-                        speechTimeout='auto',
-                        enhanced='true',
-                        speechModel='phone_call'
+                        input="speech dtmf",
+                        action="/twilio/speech",
+                        method="POST",
+                        timeout=1,  # Very short timeout for immediate response
+                        speechTimeout="auto",
+                        language="en-US",
+                        speechModel="phone_call",
+                        enhanced="true",
+                        bargeIn="true",
+                        actionOnEmptyResult="true",
+                        finishOnKey="*",
+                        partialResultCallback="/twilio/speech",
+                        partialResultCallbackMethod="POST",
+                        hints="interrupt,stop,wait",
+                        speechRecognitionSensitivity="high",
+                        speechRecognitionConfidence="high",
+                        speechRecognitionTimeout="auto",
+                        speechRecognitionLanguage="en-US",
+                        speechRecognitionModel="phone_call",
+                        speechRecognitionProfanityFilter="false",
+                        speechRecognitionPartialResults="true",
+                        speechRecognitionHints="interrupt,stop,wait"
                     )
-                    gather.say("What else would you like to know?", voice="Polly.Amy")
+                    
+                    # Add AI response with natural pauses
+                    gather.say(ai_response, voice="Polly.Amy", language="en-GB")
+                    stop_response.append(gather)
+                    
+                    return Response(str(stop_response), mimetype="application/xml")
+                    
+                except Exception as e:
+                    logger.error(f"Error handling interruption: {str(e)}")
+                    stop_response.say("I'm having trouble understanding. Could you please repeat that?")
+                    gather = Gather(
+                        input="speech dtmf",
+                        action="/twilio/speech",
+                        method="POST",
+                        timeout=1,
+                        speechTimeout="auto",
+                        language="en-US",
+                        speechModel="phone_call",
+                        enhanced="true",
+                        bargeIn="true",
+                        actionOnEmptyResult="true",
+                        finishOnKey="*",
+                        partialResultCallback="/twilio/speech",
+                        partialResultCallbackMethod="POST",
+                        hints="interrupt,stop,wait",
+                        speechRecognitionSensitivity="high",
+                        speechRecognitionConfidence="high",
+                        speechRecognitionTimeout="auto",
+                        speechRecognitionLanguage="en-US",
+                        speechRecognitionModel="phone_call",
+                        speechRecognitionProfanityFilter="false",
+                        speechRecognitionPartialResults="true",
+                        speechRecognitionHints="interrupt,stop,wait"
+                    )
+                    stop_response.append(gather)
+                    return Response(str(stop_response), mimetype="application/xml")
+            
+            # Process speech if confidence is adequate
+            if confidence >= 0.1:
+                try:
+                    # Get AI response with conversation context
+                    ai_response = await self.openai_client.get_response(speech_result)
+                    
+                    if not ai_response:
+                        raise Exception("Empty response from AI")
+                    
+                    # Configure voice response for natural conversation
+                    gather = Gather(
+                        input="speech dtmf",
+                        action="/twilio/speech",
+                        method="POST",
+                        timeout=1,
+                        speechTimeout="auto",
+                        language="en-US",
+                        speechModel="phone_call",
+                        enhanced="true",
+                        bargeIn="true",
+                        actionOnEmptyResult="true",
+                        finishOnKey="*",
+                        partialResultCallback="/twilio/speech",
+                        partialResultCallbackMethod="POST",
+                        hints="interrupt,stop,wait",
+                        speechRecognitionSensitivity="high",
+                        speechRecognitionConfidence="high",
+                        speechRecognitionTimeout="auto",
+                        speechRecognitionLanguage="en-US",
+                        speechRecognitionModel="phone_call",
+                        speechRecognitionProfanityFilter="false",
+                        speechRecognitionPartialResults="true",
+                        speechRecognitionHints="interrupt,stop,wait"
+                    )
+                    
+                    # Add AI response with natural pauses
+                    gather.say(ai_response, voice="Polly.Amy", language="en-GB")
                     response.append(gather)
                     
-                    # If no response after the gather, end the call naturally
-                    response.pause(length=2)
-                    response.say("Thank you for calling. Have a great day!", voice="Polly.Amy")
-                    
-            except Exception as e:
-                logger.error(f"Error getting OpenAI response: {str(e)}", exc_info=True)
-                response.pause(length=1)
-                response.say("I'm having some trouble processing your request. Let's try that again.", voice="Polly.Amy")
+                except Exception as e:
+                    logger.error(f"Error getting AI response: {str(e)}")
+                    response.say("I'm having trouble understanding. Could you please repeat that?")
+                    gather = Gather(
+                        input="speech dtmf",
+                        action="/twilio/speech",
+                        method="POST",
+                        timeout=1,
+                        speechTimeout="auto",
+                        language="en-US",
+                        speechModel="phone_call",
+                        enhanced="true",
+                        bargeIn="true",
+                        actionOnEmptyResult="true",
+                        finishOnKey="*",
+                        partialResultCallback="/twilio/speech",
+                        partialResultCallbackMethod="POST",
+                        hints="interrupt,stop,wait",
+                        speechRecognitionSensitivity="high",
+                        speechRecognitionConfidence="high",
+                        speechRecognitionTimeout="auto",
+                        speechRecognitionLanguage="en-US",
+                        speechRecognitionModel="phone_call",
+                        speechRecognitionProfanityFilter="false",
+                        speechRecognitionPartialResults="true",
+                        speechRecognitionHints="interrupt,stop,wait"
+                    )
+                    response.append(gather)
+            else:
+                # If confidence is low, ask for repetition more naturally
+                response.say("I didn't quite catch that. Could you say that again?")
+                gather = Gather(
+                    input="speech dtmf",
+                    action="/twilio/speech",
+                    method="POST",
+                    timeout=1,
+                    speechTimeout="auto",
+                    language="en-US",
+                    speechModel="phone_call",
+                    enhanced="true",
+                    bargeIn="true",
+                    actionOnEmptyResult="true",
+                    finishOnKey="*",
+                    partialResultCallback="/twilio/speech",
+                    partialResultCallbackMethod="POST",
+                    hints="interrupt,stop,wait",
+                    speechRecognitionSensitivity="high",
+                    speechRecognitionConfidence="high",
+                    speechRecognitionTimeout="auto",
+                    speechRecognitionLanguage="en-US",
+                    speechRecognitionModel="phone_call",
+                    speechRecognitionProfanityFilter="false",
+                    speechRecognitionPartialResults="true",
+                    speechRecognitionHints="interrupt,stop,wait"
+                )
+                response.append(gather)
             
-            return str(response)
+            return Response(str(response), mimetype="application/xml")
+            
         except Exception as e:
-            logger.error(f"Error handling speech: {str(e)}", exc_info=True)
-            raise
+            logger.error(f"Error in handle_speech: {str(e)}")
+            response = VoiceResponse()
+            response.say("I'm having some trouble. Could you please try again?")
+            gather = Gather(
+                input="speech dtmf",
+                action="/twilio/speech",
+                method="POST",
+                timeout=1,
+                speechTimeout="auto",
+                language="en-US",
+                speechModel="phone_call",
+                enhanced="true",
+                bargeIn="true",
+                actionOnEmptyResult="true",
+                finishOnKey="*",
+                partialResultCallback="/twilio/speech",
+                partialResultCallbackMethod="POST",
+                hints="interrupt,stop,wait",
+                speechRecognitionSensitivity="high",
+                speechRecognitionConfidence="high",
+                speechRecognitionTimeout="auto",
+                speechRecognitionLanguage="en-US",
+                speechRecognitionModel="phone_call",
+                speechRecognitionProfanityFilter="false",
+                speechRecognitionPartialResults="true",
+                speechRecognitionHints="interrupt,stop,wait"
+            )
+            response.append(gather)
+            return Response(str(response), mimetype="application/xml")
+
+# Initialize Twilio handler instance
+twilio_handler = TwilioHandler()
 
 @router.post("/twilio/voice")
 async def handle_voice(request: Request):
     """Handle initial voice call"""
     try:
         logger.info("Received voice call")
-        response = VoiceResponse()
         
-        # Create a Gather verb to collect user speech
-        gather = Gather(
-            input='speech',
-            action='/twilio/handle-speech',
-            method='POST',
-            language='en-US',
-            speechTimeout='auto',
-            enhanced='true'  # Use enhanced speech recognition
-        )
-        
-        # Add initial greeting
-        gather.say("Hello! I'm your AI assistant. How can I help you today?")
-        response.append(gather)
-        
-        # If no input received, add a fallback message
-        response.say("I didn't catch that. Please try again.")
-        
-        logger.info("Sending initial voice response")
-        return Response(content=str(response), media_type="application/xml")
-        
+        # Get form data
+        form_data = await request.form()
+        if not form_data:
+            logger.error("No form data received")
+            raise ValueError("No form data received")
+            
+        # Process voice call using TwilioHandler
+        response = await twilio_handler.handle_voice(request)
+        return response
+            
     except Exception as e:
-        logger.error(f"Error in handle_voice: {str(e)}", exc_info=True)
+        logger.error(f"Error in voice endpoint: {str(e)}", exc_info=True)
         response = VoiceResponse()
-        response.say("Sorry, there was an error processing your call. Please try again later.")
+        response.say(
+            "I'm sorry, there was an error. Please try again.",
+            voice="alice",
+            language="en-US"
+        )
         return Response(content=str(response), media_type="application/xml")
 
-@router.post("/twilio/handle-speech")
+@router.post("/twilio/speech")
 async def handle_speech(request: Request):
     """Handle speech input from user"""
     try:
-        form = await request.form()
-        logger.info(f"Received form data: {form}")
+        logger.info("Received speech input")
         
-        speech_result = form.get("SpeechResult", "")
-        logger.info(f"Received speech: {speech_result}")
-        
-        if not speech_result:
-            logger.warning("No speech result received")
-            response = VoiceResponse()
-            response.say("I didn't catch that. Could you please repeat?")
-            response.redirect('/twilio/voice')
-            return Response(content=str(response), media_type="application/xml")
-        
-        # Initialize clients
-        try:
-            openai_client = OpenAIClient()
-            logger.info("OpenAI client initialized successfully")
-        except Exception as e:
-            logger.error(f"Error initializing OpenAI client: {str(e)}", exc_info=True)
-            raise
-        
-        try:
-            gcp_client = GCPClient()
-            logger.info("GCP client initialized successfully")
-        except Exception as e:
-            logger.error(f"Error initializing GCP client: {str(e)}", exc_info=True)
-            raise
-        
-        # Get response from OpenAI
-        try:
-            ai_response = await openai_client.get_response(speech_result)
-            logger.info(f"AI Response: {ai_response}")
-        except Exception as e:
-            logger.error(f"Error getting OpenAI response: {str(e)}", exc_info=True)
-            raise
-        
-        # Create TwiML response
+        # Get form data
+        form_data = await request.form()
+        if not form_data:
+            logger.error("No form data received")
+            raise ValueError("No form data received")
+            
+        # Process speech using TwilioHandler
+        response = await twilio_handler.handle_speech(request)
+        return response
+            
+    except ValueError as e:
+        logger.error(f"Invalid request data: {str(e)}", exc_info=True)
         response = VoiceResponse()
-        
-        # Convert AI response to speech and store in GCP
-        try:
-            audio_file = await gcp_client.text_to_speech(ai_response)
-            if audio_file.url:  # If we have a URL, use it
-                logger.info(f"Using GCP TTS with URL: {audio_file.url}")
-                response.play(audio_file.url)
-            else:  # Fallback to Twilio's TTS
-                logger.info("Using Twilio TTS fallback")
-                response.say(ai_response)
-        except Exception as e:
-            logger.error(f"Error in text-to-speech: {str(e)}", exc_info=True)
-            # Fallback to basic TTS
-            response.say(ai_response)
-        
-        # Add option to continue conversation
+        response.say(
+            "I'm sorry, I didn't receive your message properly. Please try again.",
+            voice="alice",
+            language="en-US"
+        )
         gather = Gather(
             input='speech',
-            action='/twilio/handle-speech',
+            action='/twilio/speech',
             method='POST',
             language='en-US',
-            speechTimeout='auto'
+            speechTimeout='auto',
+            enhanced='true',
+            speechModel='phone_call',
+            timeout=3
         )
-        gather.say("Is there anything else I can help you with?")
         response.append(gather)
-        
-        logger.info("Sending speech response")
         return Response(content=str(response), media_type="application/xml")
         
     except Exception as e:
-        logger.error(f"Error in handle_speech: {str(e)}", exc_info=True)
+        logger.error(f"Unexpected error in speech endpoint: {str(e)}", exc_info=True)
         response = VoiceResponse()
-        response.say("Sorry, there was an error processing your request. Please try again.")
+        response.say(
+            "I'm sorry, there was an unexpected error. Please try again.",
+            voice="alice",
+            language="en-US"
+        )
+        gather = Gather(
+            input='speech',
+            action='/twilio/speech',
+            method='POST',
+            language='en-US',
+            speechTimeout='auto',
+            enhanced='true',
+            speechModel='phone_call',
+            timeout=3
+        )
+        response.append(gather)
         return Response(content=str(response), media_type="application/xml")
