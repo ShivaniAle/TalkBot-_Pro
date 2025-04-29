@@ -1,12 +1,9 @@
 from google.cloud import storage
 import os
+from app.config import settings
 
-# Set Google Cloud project ID
-project_id = "challenge-voice-agent"  # Replace with your actual project ID
-os.environ["GOOGLE_CLOUD_PROJECT"] = project_id
-
-# Initialize the client with explicit project
-client = storage.Client(project=project_id)
+# Initialize the client with project from settings
+client = storage.Client(project=settings.GCP_PROJECT_ID)
 
 # Get bucket name from environment or use default
 bucket_name = os.getenv("GCS_BUCKET_NAME", "challenge-voice-agent")
