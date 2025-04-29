@@ -3,19 +3,35 @@ from app.config import settings
 from app.models.audio import AudioFile
 import uuid
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
 class GCPClient:
     def __init__(self):
-        self.storage_client = storage.Client()
+        # Initialize storage client with explicit credentials
+        credentials_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+        if not credentials_path:
+            raise ValueError("GOOGLE_APPLICATION_CREDENTIALS environment variable is not set")
+            
+        if not os.path.exists(credentials_path):
+            raise FileNotFoundError(f"Credentials file not found at: {credentials_path}")
+            
         try:
-            self.tts_client = texttospeech.TextToSpeechClient()
+            self.storage_client = storage.Client.from_service_account_json(credentials_path)
+            self.bucket = self.storage_client.bucket(settings.GCP_BUCKET_NAME)
+            logger.info("GCP Storage client initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize GCP Storage client: {str(e)}")
+            raise
+            
+        try:
+            self.tts_client = texttospeech.TextToSpeechClient.from_service_account_json(credentials_path)
             self.tts_enabled = True
+            logger.info("GCP Text-to-Speech client initialized successfully")
         except Exception as e:
             logger.warning(f"Text-to-Speech API not available: {str(e)}")
             self.tts_enabled = False
-        self.bucket = self.storage_client.bucket(settings.gcp_bucket_name)
     
     async def text_to_speech(self, text: str) -> AudioFile:
         """Convert text to speech and store in GCP"""
