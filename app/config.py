@@ -9,28 +9,42 @@ load_dotenv()
 
 class Settings(BaseSettings):
     # OpenAI settings
-    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
-    openai_assistant_id: str = os.getenv("OPENAI_ASSISTANT_ID", "")
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    OPENAI_ASSISTANT_ID: str = os.getenv("OPENAI_ASSISTANT_ID", "")
     
     # Twilio settings
-    twilio_account_sid: str = os.getenv("TWILIO_ACCOUNT_SID", "")
-    twilio_auth_token: str = os.getenv("TWILIO_AUTH_TOKEN", "")
-    twilio_phone_number: str = os.getenv("TWILIO_PHONE_NUMBER", "")
+    TWILIO_ACCOUNT_SID: str = os.getenv("TWILIO_ACCOUNT_SID", "")
+    TWILIO_AUTH_TOKEN: str = os.getenv("TWILIO_AUTH_TOKEN", "")
+    TWILIO_PHONE_NUMBER: str = os.getenv("TWILIO_PHONE_NUMBER", "")
     
     # Google Cloud settings
-    gcp_project_id: str = os.getenv("GCP_PROJECT_ID", "")
-    gcp_bucket_name: str = os.getenv("GCP_BUCKET_NAME", "")
-    google_application_credentials: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+    GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "")
+    GCP_BUCKET_NAME: str = os.getenv("GCP_BUCKET_NAME", "")
+    GOOGLE_APPLICATION_CREDENTIALS: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
     
     # Application settings
-    debug: bool = os.getenv("DEBUG", "False").lower() == "true"
-    host: str = os.getenv("HOST", "0.0.0.0")
-    port: int = int(os.getenv("PORT", "8000"))
+    DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
+    HOST: str = os.getenv("HOST", "0.0.0.0")
+    PORT: int = int(os.getenv("PORT", "9000"))
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+    
+    # Add lowercase aliases
+    @property
+    def gcp_project_id(self) -> str:
+        return self.GCP_PROJECT_ID
+        
+    @property
+    def gcp_bucket_name(self) -> str:
+        return self.GCP_BUCKET_NAME
+        
+    @property
+    def google_application_credentials(self) -> str:
+        return self.GOOGLE_APPLICATION_CREDENTIALS
     
     class Config:
         env_file = ".env"
         case_sensitive = True
-        extra = "allow"  # Allow extra fields in the environment
+        extra = "allow"  # Allow extra fields
 
 @lru_cache()
 def get_settings() -> Settings:
