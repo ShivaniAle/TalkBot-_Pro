@@ -1,17 +1,18 @@
-# VoiceFlow AI
+# Voice Agent
 
-A smart voice assistant that can have natural conversations with users over the phone. It uses cutting-edge AI to understand and respond to what you say, making it feel like you're talking to a real person.
+A sophisticated voice-based conversational AI agent built with Twilio and OpenAI's Assistants API, featuring advanced conversation management through Model Context Protocol (MCP).
 
 ## Features
 
-- **Voice Call Handling**: Seamless integration with Twilio for handling incoming calls
-- **Real-time Speech Processing**: Advanced speech recognition and processing
-- **AI-Powered Responses**: Intelligent conversation handling using OpenAI's Assistants API
-- **Cloud Storage**: Secure storage of audio files in Google Cloud Storage
-- **Text-to-Speech**: High-quality voice responses using Google Cloud Text-to-Speech
-- **Extensible Architecture**: Modular design for easy extension and maintenance
+- **Natural Phone Conversations**: Engage in fluid, natural-sounding phone conversations
+- **Model Context Protocol (MCP)**: Advanced conversation state tracking and context management
+- **Emotional Intelligence**: Detects and adapts to user's emotional tone and energy level
+- **Context Awareness**: Maintains topic continuity and builds natural context connections
+- **Enhanced Speech Recognition**: Optimized for phone call quality with improved accuracy
+- **Real-time Response**: Quick and natural responses with proper phone call etiquette
+- **Error Handling**: Robust error recovery and graceful fallbacks
 
-## How It Works
+## Technical Stack
 
 1. Someone calls the phone number
 2. The system greets them and asks them to speak
@@ -34,130 +35,105 @@ A smart voice assistant that can have natural conversations with users over the 
 - Google Cloud account
 - Twilio account
 - OpenAI API access
+- **Backend**: Python with FastAPI
+- **Voice Processing**: Twilio Voice API
+- **AI**: OpenAI Assistants API with GPT-4
+- **Conversation Management**: Custom Model Context Protocol (MCP)
+- **Logging**: Comprehensive logging for debugging and monitoring
+
+
+
+
 
 ## Setup
 
-### 1. Set Up Your Environment
-```bash
-# Create a virtual environment
-python -m venv venv
+1. **Environment Variables**
+   ```bash
+   TWILIO_ACCOUNT_SID=your_twilio_sid
+   TWILIO_AUTH_TOKEN=your_twilio_token
+   TWILIO_PHONE_NUMBER=your_twilio_phone
+   OPENAI_API_KEY=your_openai_key
+   OPENAI_ASSISTANT_ID=your_assistant_id
+   ```
 
-# Activate it
-# On Windows:
-venv\Scripts\activate
-# On Mac/Linux:
-source venv/bin/activate
+2. **Installation**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-# Install required packages
-pip install -r requirements.txt
-```
+3. **Running the Application**
+   ```bash
+   uvicorn app.main:app --reload
+   ```
 
-### 2. Configure Your Settings
-Create a `.env` file with your API keys:
-```env
-#OpenAI
-OPENAI_API_KEY=your_openai_key
-OPENAI_ASSISTANT_ID=your_assistant_id
+## Model Context Protocol (MCP)
 
-#Twilio
-TWILIO_ACCOUNT_SID=your_twilio_sid
-TWILIO_AUTH_TOKEN=your_twilio_token
-TWILIO_PHONE_NUMBER=your_phone_number
+The system implements a sophisticated MCP that tracks:
 
-#GCP
-GCP_PROJECT_ID=your_project_id
-GCP_BUCKET_NAME=your_bucket_name
-```
+- **Emotional Tone**: Detects user's emotional state (positive, negative, neutral)
+- **Energy Level**: Adapts to user's energy (high, medium, low)
+- **Topic Tracking**: Maintains conversation context and topic continuity
+- **Context Connections**: Builds natural bridges between conversation topics
+- **Conversation History**: Manages recent interaction history
 
-### 3. Run the Service
-```bash
-# Start the server
-uvicorn app.main:app --host 0.0.0.0 --port 8080
-```
+## Recent Improvements
 
-### 4. Deploy to Cloud Run
-```bash
-# Build and deploy
-gcloud builds submit --tag gcr.io/your-project/voiceflow-ai
-gcloud run deploy voiceflow-ai --image gcr.io/your-project/voiceflow-ai
-```
+- Enhanced emotional tone detection
+- Improved energy level adaptation
+- Better topic continuity
+- More natural context connections
+- Optimized speech recognition settings
+- Reduced response timeouts
+- Enhanced error handling
+- Improved conversation flow
 
-### 5. Configure Google Cloud credentials:
-      - Download your service key account key file
-      - set the path in GOOGLE_APPLICATION_CREDENTIALS
+## Usage
 
-## Running the Application
+1. Call your Twilio phone number
+2. The system will greet you naturally
+3. Speak naturally - the system will:
+   - Detect your emotional tone
+   - Match your energy level
+   - Maintain topic context
+   - Provide natural responses
+   - Handle interruptions gracefully
 
-- 1. Start the server
-```bash
-Python run.py
-```
-- 2. Configure your Twilio Webhook:
-   
-## API Endpoints
- - GET /: Root endpoint
- - GET /health: Health check endpoint
- - POST /voice: Handle incoming voice calls
- - POST /speech: Handle speech results from Twilio
+## Development
 
-## Setting up ngrok
-- 1.Download and install ngrok:
-```bash
-# For Windows (using Chocolatey)
-choco install ngrok
+To contribute or modify the system:
 
-# For macOS (using Homebrew)
-brew install ngrok
+1. The main components are:
+   - `app/main.py`: FastAPI application and routes
+   - `app/twilio_handler.py`: Twilio voice handling
+   - `app/openai_handler.py`: OpenAI integration and MCP implementation
 
-```
-- 2.Start ngrok to create a tunnel to your local server:
-```bash
-ngrok http 8000
-```
-- 3.Note the HTTPS URL provided by ngrok (e.g., https://abc123.ngrok.io)
+2. Key features to modify:
+   - Conversation flow in `handle_speech`
+   - MCP implementation in `_update_conversation_state`
+   - System context in `get_response`
 
-## Configuring Twilio
-### 1.Sign up for a Twilio account at twilio.com
+## Troubleshooting
 
-### 2.Get your Twilio credentials:
+Common issues and solutions:
 
- - Account SID
- - Auth Token
- - Phone Number
-### 3.Configure your Twilio phone number:
+1. **No Response**
+   - Check OpenAI API key and assistant ID
+   - Verify Twilio credentials
+   - Check logs for specific errors
 
-- Go to the Twilio Console
-- Navigate to Phone Numbers > Manage > Active Numbers
-- Click on your phone number
-- Under "Voice & Fax" > "A Call Comes In":
-- Set the webhook URL to: https://your-ngrok-url/voice
-- Set the HTTP method to: POST
-- Under "Voice & Fax" > "Speech Recognition":
-- Set the webhook URL to: https://your-ngrok-url/speech
-- Set the HTTP method to: POST
-### 4.Update your .env file with Twilio credentials:
-```bash
-TWILIO_ACCOUNT_SID=your_account_sid
-TWILIO_AUTH_TOKEN=your_auth_token
-TWILIO_PHONE_NUMBER=your_twilio_phone_number
-```
+2. **Poor Speech Recognition**
+   - Ensure good phone connection
+   - Speak clearly and naturally
+   - Check Twilio speech settings
 
-## Testing the Setup
-### 1.Start your application:
-```bash
-python run.py
-```
-### 2.Start ngrok in a separate terminal:
-```bash
-ngrok http 8000
-```
-### 3.Make a test call:
+3. **Unnatural Responses**
+   - Verify MCP state tracking
+   - Check conversation history
+   - Review system context
 
- - Call your Twilio phone number
- - You should hear the AI assistant's greeting
- - Speak your question
-- The AI should respond through the call
+## License
 
+MIT License - See LICENSE file for details
 
 ## Project Structure
 
