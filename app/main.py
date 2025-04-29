@@ -1,23 +1,28 @@
 import os
 import logging
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, WebSocket, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from twilio.twiml.voice_response import VoiceResponse, Gather
 from app.twilio_handler import TwilioHandler
 from app.openai_handler import OpenAIClient
 from app.gcp_handler import GCPClient
+from app.audio_processor import AudioProcessor
 from typing import Dict, Optional
 import uuid
+import asyncio
+from fastapi.responses import JSONResponse
+from dotenv import load_dotenv
+from app.config import settings
 
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
 # Get port from environment variable
-PORT = int(os.getenv("PORT", "8000"))
+PORT = int(os.getenv("PORT", "9000"))
 logger.info(f"Starting application on port {PORT}")
 
 # Initialize FastAPI app
@@ -35,15 +40,27 @@ app.add_middleware(
 # Store active conversations
 active_conversations: Dict[str, dict] = {}
 
-# Initialize service clients
+# Initialize service clients silently
 try:
-    logger.info("Initializing service clients...")
+    # Redirect stdout temporarily to suppress client initialization messages
+    import sys
+    import io
+    old_stdout = sys.stdout
+    sys.stdout = io.StringIO()
+    
     twilio_handler = TwilioHandler()
     openai_client = OpenAIClient()
     gcp_client = GCPClient()
+    audio_processor = AudioProcessor()
+    
+    # Restore stdout
+    sys.stdout = old_stdout
 except Exception as e:
     logger.error(f"Failed to initialize service clients: {str(e)}")
     raise
+
+# Store active WebSocket connections
+active_connections: Dict[str, WebSocket] = {}
 
 def create_conversation(call_sid: str) -> dict:
     """Create a new conversation entry"""
@@ -64,100 +81,27 @@ async def root():
 
 @app.post("/twilio/voice")
 async def handle_voice(request: Request):
+    """Handle incoming voice calls with natural conversation flow"""
     try:
-        form_data = await request.form()
-        call_sid = form_data.get("CallSid", str(uuid.uuid4()))
-        logger.info(f"New call received: {call_sid}")
-        
-        conversation = get_conversation(call_sid) or create_conversation(call_sid)
-        
-        response = VoiceResponse()
-        response.say("Hello! I'm your AI assistant. What would you like to talk about?", voice="alice")
-        response.pause(length=2)
-        
-        gather = Gather(
-            input="speech",
-            action="/twilio/speech",
-            method="POST",
-            timeout=10,
-            speechTimeout="auto",
-            language="en-US",
-            enhanced="true",
-            profanityFilter="false"
-        )
-        response.append(gather)
-        
-        response.say("I'm sorry, I couldn't hear you. Please try again.", voice="alice")
-        return Response(content=str(response), media_type="application/xml")
-        
+        logger.info("Received voice call")
+        return await twilio_handler.handle_voice(request)
     except Exception as e:
-        logger.error(f"Error in voice endpoint: {str(e)}")
+        logger.error(f"Error handling voice call: {str(e)}")
         response = VoiceResponse()
-        response.say("I'm sorry, there was an error. Please try again later.", voice="alice")
-        return Response(content=str(response), media_type="application/xml")
+        response.say("I'm having some trouble. Could you please try again?")
+        return Response(str(response), mimetype="application/xml")
 
 @app.post("/twilio/speech")
 async def handle_speech(request: Request):
+    """Handle speech input with natural conversation flow"""
     try:
-        form_data = await request.form()
-        call_sid = form_data.get("CallSid")
-        speech_result = form_data.get("SpeechResult", "")
-        
-        logger.info(f"Speech received: {speech_result[:50]}...")
-        
-        if not call_sid or not speech_result:
-            response = VoiceResponse()
-            response.say("I'm sorry, I couldn't hear what you said. Please try again.", voice="alice")
-            return Response(content=str(response), media_type="application/xml")
-        
-        conversation = get_conversation(call_sid) or create_conversation(call_sid)
-        conversation["messages"].append({"role": "user", "content": speech_result})
-        
-        try:
-            conversation_history = "\n".join([
-                f"{msg['role']}: {msg['content']}"
-                for msg in conversation["messages"][-5:]
-            ])
-            
-            ai_response = await openai_client.get_response(
-                speech_result,
-                conversation_history=conversation_history
-            )
-            
-            conversation["messages"].append({
-                "role": "assistant",
-                "content": ai_response
-            })
-            
-        except Exception as e:
-            logger.error(f"Error getting AI response: {str(e)}")
-            response = VoiceResponse()
-            response.say("I'm sorry, I'm having trouble processing your request. Please try again later.", voice="alice")
-            return Response(content=str(response), media_type="application/xml")
-        
-        response = VoiceResponse()
-        response.pause(length=3)
-        response.say(ai_response, voice="alice")
-        response.pause(length=3)
-        
-        gather = Gather(
-            input="speech",
-            action="/twilio/continue",
-            method="POST",
-            timeout=10,
-            speechTimeout="auto"
-        )
-        gather.say("Would you like to continue our conversation? Please say yes or no.", voice="alice")
-        response.append(gather)
-        
-        response.say("Thank you for calling. Goodbye!", voice="alice")
-        return Response(content=str(response), media_type="application/xml")
-        
+        logger.info("Received speech input")
+        return await twilio_handler.handle_speech(request)
     except Exception as e:
-        logger.error(f"Error in speech endpoint: {str(e)}")
+        logger.error(f"Error handling speech input: {str(e)}")
         response = VoiceResponse()
-        response.say("I'm sorry, there was an error processing your request. Please try again later.", voice="alice")
-        return Response(content=str(response), media_type="application/xml")
+        response.say("I'm having some trouble. Could you please try again?")
+        return Response(str(response), mimetype="application/xml")
 
 @app.post("/twilio/continue")
 async def handle_continue(request: Request):
@@ -166,28 +110,23 @@ async def handle_continue(request: Request):
         call_sid = form_data.get("CallSid")
         speech_result = form_data.get("SpeechResult", "").lower()
         
-        logger.info(f"Continue request: {speech_result[:50]}...")
-        
         response = VoiceResponse()
-        response.pause(length=3)
         
         if "yes" in speech_result or "yeah" in speech_result or "sure" in speech_result:
-            response.say("Great! What would you like to talk about?", voice="alice")
-            response.pause(length=3)
+            response.say("Great! What would you like to talk about?", voice="alice", bargeIn="true")
             
             gather = Gather(
                 input="speech",
                 action="/twilio/speech",
                 method="POST",
-                timeout=10,
+                timeout=3,
                 speechTimeout="auto",
                 language="en-US",
                 enhanced="true",
-                profanityFilter="false"
+                profanityFilter="false",
+                bargeIn="true"
             )
             response.append(gather)
-            
-            response.say("I'm sorry, I couldn't hear you. Please try again.", voice="alice")
             
         else:
             if speech_result:
@@ -199,33 +138,27 @@ async def handle_continue(request: Request):
                     })
                     
                     try:
-                        conversation_history = "\n".join([
-                            f"{msg['role']}: {msg['content']}"
-                            for msg in conversation["messages"][-5:]
-                        ])
-                        
-                        ai_response = await openai_client.get_response(
-                            speech_result,
-                            conversation_history=conversation_history
-                        )
+                        # Get response from OpenAI without conversation_history parameter
+                        ai_response = await openai_client.get_response(speech_result)
                         
                         conversation["messages"].append({
                             "role": "assistant",
                             "content": ai_response
                         })
                         
-                        response.pause(length=3)
-                        response.say(ai_response, voice="alice")
-                        response.pause(length=3)
+                        response.say(ai_response, voice="alice", bargeIn="true")
                         
                         gather = Gather(
                             input="speech",
-                            action="/twilio/continue",
+                            action="/twilio/speech",
                             method="POST",
-                            timeout=10,
-                            speechTimeout="auto"
+                            timeout=3,
+                            speechTimeout="auto",
+                            language="en-US",
+                            enhanced="true",
+                            profanityFilter="false",
+                            bargeIn="true"
                         )
-                        gather.say("Would you like to continue our conversation? Please say yes or no.", voice="alice")
                         response.append(gather)
                         
                     except Exception as e:
@@ -246,7 +179,75 @@ async def handle_continue(request: Request):
 
 @app.get("/health")
 async def health_check():
+    """Health check endpoint"""
     return {"status": "healthy"}
+
+@app.websocket("/ws/audio/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    """Handle WebSocket connections for real-time audio streaming"""
+    try:
+        await websocket.accept()
+        active_connections[client_id] = websocket
+        logger.info(f"WebSocket connection established for client {client_id}")
+        
+        # Start audio streaming
+        audio_stream = audio_processor.start_streaming()
+        
+        try:
+            while True:
+                # Receive audio data from client
+                audio_data = await websocket.receive_bytes()
+                
+                # Process audio through MCP
+                processed_chunk = await audio_processor._process_audio_chunk(audio_data)
+                
+                # Get streaming response from OpenAI
+                async for response_chunk in openai_client.get_streaming_response(str(audio_data)):
+                    # Send response chunk back to client
+                    await websocket.send_text(response_chunk)
+                
+        except Exception as e:
+            logger.error(f"Error in WebSocket connection: {str(e)}")
+            raise
+            
+    finally:
+        # Clean up connection
+        if client_id in active_connections:
+            del active_connections[client_id]
+        audio_processor.stop_streaming()
+        await websocket.close()
+
+@app.post("/voice")
+async def voice_endpoint(request: Request):
+    """Handle incoming voice calls"""
+    try:
+        # Get form data
+        form_data = await request.form()
+        logger.info("Received voice request")
+        
+        # Handle voice request through Twilio
+        response = await twilio_handler.handle_voice(form_data)
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in voice endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/speech")
+async def speech_endpoint(request: Request):
+    """Handle speech recognition results"""
+    try:
+        # Get form data
+        form_data = await request.form()
+        logger.info("Received speech request")
+        
+        # Process speech through Twilio handler
+        response = await twilio_handler.handle_speech(form_data)
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in speech endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
@@ -262,12 +263,14 @@ if __name__ == "__main__":
     
     logger.info(f"Starting server on port {PORT}")
     try:
+        # Run uvicorn with minimal output
         uvicorn.run(
             "app.main:app",
             host="0.0.0.0",
             port=PORT,
             reload=True,
-            log_level="info"
+            log_level="critical",
+            access_log=False  # Disable access logs
         )
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
