@@ -84,24 +84,26 @@ async def handle_voice(request: Request):
     """Handle incoming voice calls with natural conversation flow"""
     try:
         logger.info("Received voice call")
-        return await twilio_handler.handle_voice(request)
+        response = await twilio_handler.handle_voice(request)
+        return Response(str(response), media_type="application/xml")
     except Exception as e:
-        logger.error(f"Error handling voice call: {str(e)}")
+        logger.error(f"Error handling voice call: {str(e)}", exc_info=True)
         response = VoiceResponse()
         response.say("I'm having some trouble. Could you please try again?")
-        return Response(str(response), mimetype="application/xml")
+        return Response(str(response), media_type="application/xml")
 
 @app.post("/twilio/speech")
 async def handle_speech(request: Request):
     """Handle speech input with natural conversation flow"""
     try:
         logger.info("Received speech input")
-        return await twilio_handler.handle_speech(request)
+        response = await twilio_handler.handle_speech(request)
+        return Response(str(response), media_type="application/xml")
     except Exception as e:
-        logger.error(f"Error handling speech input: {str(e)}")
+        logger.error(f"Error handling speech input: {str(e)}", exc_info=True)
         response = VoiceResponse()
         response.say("I'm having some trouble. Could you please try again?")
-        return Response(str(response), mimetype="application/xml")
+        return Response(str(response), media_type="application/xml")
 
 @app.post("/twilio/continue")
 async def handle_continue(request: Request):
@@ -221,33 +223,33 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 async def voice_endpoint(request: Request):
     """Handle incoming voice calls"""
     try:
-        # Get form data
-        form_data = await request.form()
         logger.info("Received voice request")
         
         # Handle voice request through Twilio
-        response = await twilio_handler.handle_voice(form_data)
-        return response
+        response = await twilio_handler.handle_voice(request)
+        return Response(content=str(response), media_type="application/xml")
         
     except Exception as e:
-        logger.error(f"Error in voice endpoint: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error in voice endpoint: {str(e)}", exc_info=True)
+        response = VoiceResponse()
+        response.say("I'm sorry, I'm having trouble processing your request. Please try again later.")
+        return Response(content=str(response), media_type="application/xml")
 
 @app.post("/speech")
 async def speech_endpoint(request: Request):
     """Handle speech recognition results"""
     try:
-        # Get form data
-        form_data = await request.form()
         logger.info("Received speech request")
         
         # Process speech through Twilio handler
-        response = await twilio_handler.handle_speech(form_data)
-        return response
+        response = await twilio_handler.handle_speech(request)
+        return Response(content=str(response), media_type="application/xml")
         
     except Exception as e:
-        logger.error(f"Error in speech endpoint: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error in speech endpoint: {str(e)}", exc_info=True)
+        response = VoiceResponse()
+        response.say("I'm sorry, I'm having trouble processing your request. Please try again later.")
+        return Response(content=str(response), media_type="application/xml")
 
 if __name__ == "__main__":
     import uvicorn
