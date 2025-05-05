@@ -1,5 +1,6 @@
 from twilio.twiml.voice_response import VoiceResponse, Gather
 from app.openai_handler import OpenAIClient
+from app.mcp_handler import MCPHandler
 from app.config import settings
 import logging
 from fastapi import Request
@@ -20,8 +21,9 @@ class TwilioHandler:
             if not settings.TWILIO_PHONE_NUMBER:
                 raise ValueError("TWILIO_PHONE_NUMBER is not set")
             
-            # Initialize OpenAI client
+            # Initialize OpenAI client and MCP handler
             self.openai_client = OpenAIClient()
+            self.mcp_handler = MCPHandler()
             
             # Store active conversations
             self.active_conversations = {}
@@ -32,19 +34,20 @@ class TwilioHandler:
             logger.error(f"Failed to initialize Twilio handler: {str(e)}", exc_info=True)
             raise
 
-    def get_conversation_id(self, request: Request) -> str:
-        """Get or create conversation ID from request"""
-        form_data = request.form()
-        call_sid = form_data.get("CallSid", "default")
-        return call_sid
-
     async def handle_voice(self, request: Request) -> str:
         """Handle incoming voice call"""
         try:
             response = VoiceResponse()
             
-            # Get conversation ID
-            conversation_id = self.get_conversation_id(request)
+            # Get conversation ID from form data
+            form_data = await request.form()
+            conversation_id = form_data.get("CallSid", "default")
+            
+            # Initialize conversation context
+            self.active_conversations[conversation_id] = {
+                "context": {},
+                "history": []
+            }
             
             # Add a warm, conversational greeting
             response.say("Hi there! It's great to hear from you. What would you like to chat about today?", voice="alice", bargeIn="true")
@@ -87,17 +90,21 @@ class TwilioHandler:
             
             # Process speech if confidence is high enough
             if confidence > 0.1:
-                # Get AI response with conversation context
-                ai_response = await self.openai_client.get_response(
+                # Get conversation context
+                conversation_context = self.active_conversations.get(conversation_id, {"context": {}, "history": []})
+                
+                # Process input using MCP
+                ai_response = await self.mcp_handler.process_input(
                     speech_result,
-                    conversation_context={
-                        "conversation_id": conversation_id,
-                        "is_interactive": True,
-                        "should_ask_questions": True,
-                        "tone": "friendly",
-                        "response_style": "conversational"
-                    }
+                    conversation_context["context"]
                 )
+                
+                # Update conversation history
+                conversation_context["history"].append({
+                    "user": speech_result,
+                    "assistant": ai_response
+                })
+                self.active_conversations[conversation_id] = conversation_context
                 
                 # Create response
                 response = VoiceResponse()
