@@ -19,7 +19,7 @@ def upload_to_gcs(
     try:
         # Initialize GCS client
         storage_client = storage.Client()
-        bucket = storage_client.bucket(settings.gcp_bucket_name)
+        bucket = storage_client.bucket(settings.GCP_BUCKET_NAME)
         
         # Generate filename if not provided
         if not filename:
